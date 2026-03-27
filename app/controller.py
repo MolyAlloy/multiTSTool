@@ -23,3 +23,11 @@ class Controller:
     def get_current_structure(self):
         """Get current structure"""
         return self.state.current_structure
+    
+    def get_current_filepath(self):
+        """Get current file path"""
+        return self.state.current_filepath
+    
+    def set_current_filepath(self, filepath):
+        """Set current file path"""
+        self.state.current_filepath = filepath

@@ -15,6 +15,7 @@ class AppState:
         if self._initialized:
             return
         self.current_structure = None
+        self.current_filepath = None
         self.selected_atoms = []
         self.history = []
         self.modified = False
@@ -23,6 +24,7 @@ class AppState:
     def reset(self):
         """Reset state to initial"""
         self.current_structure = None
+        self.current_filepath = None
         self.selected_atoms = []
         self.history = []
         self.modified = False

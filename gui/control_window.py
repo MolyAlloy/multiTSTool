@@ -186,6 +186,7 @@ class ControlWindow:
         self._refresh_file_list()
     
     def _open_file(self, filepath):
+        self.controller.set_current_filepath(str(filepath))
         self._open_in_ase(str(filepath))
     
     def _on_enter_key(self, event):
@@ -277,6 +278,7 @@ class ControlWindow:
     
     def _run_system_command(self, cmd):
         self._print_output(f"$ {cmd}")
+        working_dir = str(self.current_path)
         
         def run():
             try:
@@ -284,7 +286,8 @@ class ControlWindow:
                     cmd, 
                     shell=True, 
                     capture_output=True, 
-                    text=True
+                    text=True,
+                    cwd=working_dir
                 )
                 if result.stdout:
                     self.terminal.after(0, lambda: self._print_output(result.stdout))
@@ -300,7 +303,20 @@ class ControlWindow:
         self.terminal.see(tk.END)
     
     def _create_main_area(self):
-        pass
+        from gui.ase_viewer import ASEViewer
+        self.ase_viewer = ASEViewer(
+            self.main_frame,
+            self.controller,
+            on_file_opened=self._on_file_opened
+        )
+        self.ase_viewer.pack(fill=tk.BOTH, expand=True)
+
+    def _on_file_opened(self, filepath):
+        """Called when ASEViewer opens a file"""
+        self.controller.set_current_filepath(filepath)
+        file_path = Path(filepath)
+        if file_path.exists():
+            self._navigate_to(file_path.parent)
     
     def open_file(self):
         from tkinter import filedialog
@@ -309,6 +325,7 @@ class ControlWindow:
         )
         if filepath:
             self._print_output(f"Opening: {filepath}", "info")
+            self.controller.set_current_filepath(filepath)
             self._open_in_ase(filepath)
             file_path = Path(filepath)
             if file_path.exists():
