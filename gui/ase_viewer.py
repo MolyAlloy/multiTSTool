@@ -5,6 +5,8 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+import json
+import tempfile
 
 try:
     from ase.io import read
@@ -13,6 +15,7 @@ except ImportError:
     ASE_AVAILABLE = False
 
 SCRIPT_DIR = Path(__file__).parent.parent / "scripts"
+COMMAND_FILE = Path(tempfile.gettempdir()) / "ase_gui_commands.json"
 
 
 class ASEViewer(ttk.Frame):
@@ -51,8 +54,45 @@ class ASEViewer(ttk.Frame):
             command=self.open_with_poll
         ).pack(side=tk.LEFT, padx=5)
 
+        ttk.Button(
+            btn_frame,
+            text="Atom Swap Mode",
+            command=self.open_atom_swap_viewer
+        ).pack(side=tk.LEFT, padx=5)
+
         self.poll_label = ttk.Label(view_frame, text="Polling: OFF")
         self.poll_label.pack(anchor=tk.W, pady=2)
+
+        swap_frame = ttk.LabelFrame(view_frame, text="Quick Swap (when ASE open)", padding="5")
+        swap_frame.pack(fill=tk.X, pady=(10, 0))
+
+        swap_btn_frame = ttk.Frame(swap_frame)
+        swap_btn_frame.pack()
+
+        ttk.Label(swap_btn_frame, text="Atom 1:").pack(side=tk.LEFT, padx=2)
+        self.atom1_entry = ttk.Entry(swap_btn_frame, width=6)
+        self.atom1_entry.pack(side=tk.LEFT, padx=2)
+        self.atom1_entry.insert(0, "0")
+
+        ttk.Label(swap_btn_frame, text="Atom 2:").pack(side=tk.LEFT, padx=2)
+        self.atom2_entry = ttk.Entry(swap_btn_frame, width=6)
+        self.atom2_entry.pack(side=tk.LEFT, padx=2)
+        self.atom2_entry.insert(0, "1")
+
+        ttk.Button(
+            swap_btn_frame,
+            text="Swap Numbers",
+            command=self.send_swap_command
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            swap_btn_frame,
+            text="Get Selection",
+            command=self.send_get_selection_command
+        ).pack(side=tk.LEFT, padx=2)
+
+        self.selection_label = ttk.Label(swap_frame, text="Selection: -")
+        self.selection_label.pack(anchor=tk.W, pady=(5, 0))
 
     def open_ase_viewer(self):
         """Open current structure in ASE viewer (no polling)"""
@@ -69,6 +109,49 @@ class ASEViewer(ttk.Frame):
             return
         self.current_filepath = filepath
         self._launch_subprocess(filepath, poll=True)
+
+    def open_atom_swap_viewer(self):
+        """Open ASE viewer with atom swap panel"""
+        filepath = self._get_filepath()
+        if filepath is None:
+            return
+        self.current_filepath = filepath
+        script = SCRIPT_DIR / "atom_swap_viewer.py"
+        cmd = [sys.executable, str(script), filepath]
+        self._process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        self._polling = False
+        self.poll_label.config(text="Atom Swap Mode: ON")
+        if self.on_file_opened:
+            self.on_file_opened(filepath)
+
+    def send_swap_command(self):
+        """Send swap command to running ASE GUI"""
+        try:
+            atom1 = int(self.atom1_entry.get())
+            atom2 = int(self.atom2_entry.get())
+        except ValueError:
+            print("Invalid atom index")
+            return
+
+        self._write_command("swap", [atom1, atom2])
+        print(f"Sent swap command: atoms {atom1} <-> {atom2}")
+
+    def send_get_selection_command(self):
+        """Request current selection from ASE GUI"""
+        self._write_command("get_selection", None)
+
+    def _write_command(self, cmd, indices):
+        """Write command to the command file"""
+        with open(COMMAND_FILE, "w") as f:
+            json.dump({"cmd": cmd, "indices": indices}, f)
+
+    def check_selection_response(self):
+        """Poll for selection response from ASE GUI"""
+        pass
 
     def _get_filepath(self):
         """Get file path from controller or file dialog"""
