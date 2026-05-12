@@ -15,7 +15,7 @@ class ControlWindow:
         self.controller = controller
         self.root = tk.Tk()
         self.root.title("multiTS - VASP Structure Tool")
-        self.root.geometry("900x600")
+        self.root.geometry("900x720")
         
         self.history = []
         self.history_index = -1
