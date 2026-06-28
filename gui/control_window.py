@@ -41,6 +41,7 @@ class ControlWindow:
         ttk.Button(toolbar, text="Save As...", command=self.save_as).pack(side=tk.LEFT, padx=2)
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5)
         ttk.Button(toolbar, text="ASE GUI", command=self.launch_ase_gui).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="CP2K-FIX", command=self.launch_cp2k_fix_gui).pack(side=tk.LEFT, padx=2)
         ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=5)
         ttk.Button(toolbar, text="Scripts", command=self.list_scripts).pack(side=tk.LEFT, padx=2)
     
@@ -59,6 +60,7 @@ class ControlWindow:
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Tools", menu=tools_menu)
         tools_menu.add_command(label="Open ASE GUI", command=self.launch_ase_gui)
+        tools_menu.add_command(label="CP2K-FIX", command=self.launch_cp2k_fix_gui)
         tools_menu.add_command(label="Refresh Scripts", command=self.list_scripts)
     
     def _create_terminal(self):
@@ -366,6 +368,37 @@ class ControlWindow:
             subprocess.Popen(["ase", "gui"])
         except FileNotFoundError:
             self._print_output("Error: 'ase gui' command not found. Make sure ASE is installed.", "error")
+
+    def launch_cp2k_fix_gui(self):
+        from tkinter import filedialog
+
+        filepath = filedialog.askopenfilename(
+            title="Select structure file for CP2K fixed atoms",
+            filetypes=[
+                ("Structure files", "*.xyz *.vasp *.cif CONTCAR POSCAR"),
+                ("All files", "*.*")
+            ]
+        )
+        if not filepath:
+            return
+
+        script = self.SCRIPT_DIR / "cp2k_fix_viewer.py"
+        if not script.exists():
+            self._print_output(f"Script not found: {script}", "error")
+            return
+
+        self._print_output(f"Launching CP2K-FIX: {filepath}", "info")
+        self.controller.set_current_filepath(filepath)
+
+        file_path = Path(filepath)
+        if file_path.exists():
+            self._navigate_to(file_path.parent)
+
+        try:
+            subprocess.Popen([sys.executable, str(script), filepath])
+            self._print_output("CP2K-FIX launched", "info")
+        except Exception as e:
+            self._print_output(f"Error launching CP2K-FIX: {e}", "error")
     
     def undo(self):
         print("Undo")
