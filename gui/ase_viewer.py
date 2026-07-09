@@ -16,49 +16,80 @@ SCRIPT_DIR = Path(__file__).parent.parent / "scripts"
 
 
 class ASEViewer(ttk.Frame):
-    def __init__(self, parent, controller, on_file_opened=None):
+    def __init__(
+        self,
+        parent,
+        controller,
+        on_file_opened=None,
+        open_command=None,
+        save_command=None,
+        cp2k_fix_command=None,
+    ):
         super().__init__(parent)
         self.controller = controller
         self.on_file_opened = on_file_opened
+        self.open_command = open_command
+        self.save_command = save_command
+        self.cp2k_fix_command = cp2k_fix_command
         self.current_filepath = None
         self._polling = False
         self._process = None
         self._create_widgets()
 
     def _create_widgets(self):
-        view_frame = ttk.LabelFrame(self, text="3D Viewer", padding="5")
+        view_frame = ttk.LabelFrame(self, text="ASE-Based Tools", padding="5")
         view_frame.pack(fill=tk.BOTH, expand=True)
 
+        file_frame = ttk.Frame(view_frame)
+        file_frame.pack(fill=tk.X, pady=(5, 3))
+
+        ttk.Button(
+            file_frame,
+            text="Open Structure",
+            command=self.open_command if self.open_command else self.open_ase_viewer
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            file_frame,
+            text="Save Structure",
+            command=self.save_command if self.save_command else self._noop
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            file_frame,
+            text="CP2K-FIX",
+            command=self.cp2k_fix_command if self.cp2k_fix_command else self._noop
+        ).pack(side=tk.LEFT, padx=5)
+
+        ase_frame = ttk.Frame(view_frame)
+        ase_frame.pack(fill=tk.X, pady=(3, 8))
+
+        viewer_buttons = [
+            ttk.Button(
+                ase_frame,
+                text="Live Poll",
+                command=self.open_with_poll
+            ),
+            ttk.Button(
+                ase_frame,
+                text="Atom Swap",
+                command=self.open_atom_swap_viewer
+            ),
+        ]
+
+        for button in viewer_buttons:
+            button.pack(side=tk.LEFT, padx=5)
+
         if not ASE_AVAILABLE:
+            for button in viewer_buttons:
+                button.configure(state=tk.DISABLED)
             ttk.Label(
                 view_frame,
-                text="ASE not available\nInstall: pip install ase"
-            ).pack()
-            return
+                text="ASE not available. Install: pip install ase"
+            ).pack(anchor=tk.W, padx=5, pady=(0, 4))
 
-        btn_frame = ttk.Frame(view_frame)
-        btn_frame.pack(pady=10)
-
-        ttk.Button(
-            btn_frame,
-            text="Open ASE Viewer",
-            command=self.open_ase_viewer
-        ).pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(
-            btn_frame,
-            text="Open + Poll",
-            command=self.open_with_poll
-        ).pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(
-            btn_frame,
-            text="Atom Swap Mode",
-            command=self.open_atom_swap_viewer
-        ).pack(side=tk.LEFT, padx=5)
-
-        self.poll_label = ttk.Label(view_frame, text="Polling: OFF")
-        self.poll_label.pack(anchor=tk.W, pady=2)
+    def _noop(self):
+        return
 
     def open_ase_viewer(self):
         """Open current structure in ASE viewer (no polling)"""
@@ -83,14 +114,15 @@ class ASEViewer(ttk.Frame):
             return
         self.current_filepath = filepath
         script = SCRIPT_DIR / "atom_swap_viewer.py"
+        filepath = str(Path(filepath).resolve())
         cmd = [sys.executable, str(script), filepath]
         self._process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            cwd=str(Path(filepath).parent)
         )
         self._polling = False
-        self.poll_label.config(text="Atom Swap Mode: ON")
         if self.on_file_opened:
             self.on_file_opened(filepath)
 
@@ -99,8 +131,13 @@ class ASEViewer(ttk.Frame):
         filepath = self.controller.get_current_filepath()
         if filepath is None:
             from tkinter import filedialog
+            initialdir = None
+            current_path = getattr(self.on_file_opened, "__self__", None)
+            if current_path is not None and hasattr(current_path, "current_path"):
+                initialdir = str(current_path.current_path)
             filepath = filedialog.askopenfilename(
                 title="Select file to open",
+                initialdir=initialdir,
                 filetypes=[
                     ("Structure files", "*.xyz *.vasp *.cif CONTCAR POSCAR"),
                     ("All files", "*.*")
@@ -116,19 +153,19 @@ class ASEViewer(ttk.Frame):
             return
 
         filepath = str(Path(filepath).resolve())
+        working_dir = str(Path(filepath).parent)
 
         if poll:
             script = SCRIPT_DIR / "poll_viewer.py"
             cmd = [sys.executable, str(script), filepath, str(interval_ms)]
-            self.poll_label.config(text=f"Polling: ON")
         else:
-            cmd = ["ase", "gui", filepath]
-            self.poll_label.config(text="Polling: OFF")
+            cmd = [sys.executable, "-m", "ase", "gui", filepath]
 
         self._process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            cwd=working_dir
         )
         self._polling = poll
 
