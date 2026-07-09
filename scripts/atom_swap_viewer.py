@@ -4,7 +4,6 @@ import os
 import json
 import tempfile
 import numpy as np
-from pathlib import Path
 
 
 def get_command_file():
@@ -24,59 +23,24 @@ def read_command():
         return None, None
 
 
-def _swap_xyz_records(filepath, i, j):
-    """Swap complete atom records in an XYZ file while preserving formatting."""
-    path = Path(filepath)
-    with path.open("r", newline="") as handle:
-        text = handle.read()
-    lines = text.splitlines(keepends=True)
-
-    if len(lines) < 2:
-        print(f"Invalid XYZ file: {filepath}")
-        return False
-
-    try:
-        n_atoms = int(lines[0].strip())
-    except ValueError:
-        print(f"Invalid XYZ atom count in file: {filepath}")
-        return False
-
-    if not (0 <= i < n_atoms and 0 <= j < n_atoms):
-        print(f"Invalid atom numbers: {i + 1}, {j + 1}. File has {n_atoms} atoms.")
-        return False
-
-    data_start = 2
-    data_end = data_start + n_atoms
-    if len(lines) < data_end:
-        print(f"Invalid XYZ file: expected {n_atoms} atom records, found {max(0, len(lines) - data_start)}.")
-        return False
-
-    lines[data_start + i], lines[data_start + j] = lines[data_start + j], lines[data_start + i]
-    with path.open("w", newline="") as handle:
-        handle.write("".join(lines))
-    return True
-
-
 def swap_atoms_in_file(filepath, i, j):
-    """Swap atom records at zero-based indices i and j in the file."""
-    if Path(filepath).suffix.lower() == ".xyz":
-        ok = _swap_xyz_records(filepath, i, j)
-        if not ok:
-            return False
-    else:
-        from ase.io import read, write
+    """Swap positions of atoms at indices i and j in the file"""
+    from ase.io import read, write
+    import numpy as np
 
-        atoms = read(filepath)
+    atoms = read(filepath)
 
-        if not (0 <= i < len(atoms) and 0 <= j < len(atoms)):
-            print(f"Invalid atom numbers: {i + 1}, {j + 1}. File has {len(atoms)} atoms.")
-            return False
+    if not (0 <= i < len(atoms) and 0 <= j < len(atoms)):
+        print(f"Invalid indices: {i}, {j}. File has {len(atoms)} atoms.")
+        return False
 
-        order = list(range(len(atoms)))
-        order[i], order[j] = order[j], order[i]
-        write(filepath, atoms[order])
+    pos_i = atoms[i].position.copy()
+    pos_j = atoms[j].position.copy()
+    atoms[i].position = pos_j
+    atoms[j].position = pos_i
 
-    print(f"Swapped atom numbers {i + 1} and {j + 1} in file {filepath}", flush=True)
+    atoms.write(filepath)
+    print(f"Swapped position of atom {i} with atom {j} in file {filepath}", flush=True)
     return True
 
 
@@ -121,21 +85,20 @@ def main():
             return
 
         cur_sel = get_selected_indices()
-        cur_sel_label.config(text=str([idx + 1 for idx in cur_sel]) if cur_sel else "-")
-        prev_sel_label.config(text=str([idx + 1 for idx in prev_selection]) if prev_selection else "-")
+        cur_sel_label.config(text=str(cur_sel) if cur_sel else "-")
+        prev_sel_label.config(text=str(prev_selection) if prev_selection else "-")
 
         if len(cur_sel) >= 1:
-            atom1_var.set(cur_sel[0] + 1)
+            atom1_var.set(cur_sel[0])
         if len(cur_sel) >= 2:
-            atom2_var.set(cur_sel[1] + 1)
+            atom2_var.set(cur_sel[1])
 
         prev_selection = cur_sel
 
     def on_swap():
-        nonlocal prev_selection
         try:
-            i = atom1_var.get() - 1
-            j = atom2_var.get() - 1
+            i = atom1_var.get()
+            j = atom2_var.get()
             if swap_atoms_in_file(filepath, i, j):
                 new_atoms = read(filepath)
                 gui.images.initialize([new_atoms])
@@ -149,23 +112,23 @@ def main():
     swap_window = ui.Window(_("Atom Swap Panel"))
     frame = swap_window.win
 
-    tk.Label(frame, text=_("Current selection (atom no.):")).pack()
+    tk.Label(frame, text=_("Current selection:")).pack()
     cur_sel_label = tk.Label(frame, text="-", width=30, bg="white")
     cur_sel_label.pack()
 
-    tk.Label(frame, text=_("Previous swap (atom no.):")).pack()
+    tk.Label(frame, text=_("Previous swap:")).pack()
     prev_sel_label = tk.Label(frame, text="-", width=30, bg="lightgray")
     prev_sel_label.pack()
 
     input_frame = tk.Frame(frame)
     input_frame.pack(pady=5)
 
-    tk.Label(input_frame, text=_("Atom 1 no.:")).pack(side=tk.LEFT, padx=2)
-    atom1_var = tk.IntVar(value=1)
+    tk.Label(input_frame, text=_("Atom 1 index:")).pack(side=tk.LEFT, padx=2)
+    atom1_var = tk.IntVar(value=0)
     tk.Entry(input_frame, textvariable=atom1_var, width=6).pack(side=tk.LEFT, padx=5)
 
-    tk.Label(input_frame, text=_("Atom 2 no.:")).pack(side=tk.LEFT, padx=2)
-    atom2_var = tk.IntVar(value=1)
+    tk.Label(input_frame, text=_("Atom 2 index:")).pack(side=tk.LEFT, padx=2)
+    atom2_var = tk.IntVar(value=0)
     tk.Entry(input_frame, textvariable=atom2_var, width=6).pack(side=tk.LEFT, padx=5)
 
     btn_frame = tk.Frame(frame)
